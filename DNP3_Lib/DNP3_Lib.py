@@ -1,5 +1,7 @@
 __author__ = 'Nicholas Rodofile'
 from scapy.all import *
+from scapy.layers.inet import TCP, UDP
+
 import crcmod.predefined
 
 '''
@@ -31,11 +33,12 @@ Application_Rsp_summary = "Response %DNP3ApplicationResponse.FUNC_CODE% "
 Application_Req_summary = "Request %DNP3ApplicationRequest.FUNC_CODE% "
 DNP3_summary = "From %DNP3.SOURCE% to %DNP3.DESTINATION% "
 
-'''
-Initalise a predefined crc object for DNP3 Cyclic Redundancy Check
-Info : http://crcmod.sourceforge.net/crcmod.predefined.html
-'''
+
 def crcDNP(data):
+    """
+    Initalise a predefined crc object for DNP3 Cyclic Redundancy Check
+    Info : http://crcmod.sourceforge.net/crcmod.predefined.html
+    """
     crc16DNP = crcmod.predefined.mkCrcFun('crc-16-dnp')
     return crc16DNP(data)
 
@@ -120,6 +123,7 @@ class DNP3RequestDataObjects(Packet):
     def extract_padding(self, p):
         return "", p
 
+
 class DNP3Application(Packet):
     def guess_payload_class(self, payload):
         return Packet.guess_payload_class(self, payload)
@@ -162,6 +166,7 @@ class DNP3ApplicationIIN(Packet):
     def extract_padding(self, p):
         return "", p
 
+
 class DNP3ApplicationResponse(DNP3Application):
     name = "DNP3_Application_response"
     fields_desc = [
@@ -172,12 +177,13 @@ class DNP3ApplicationResponse(DNP3Application):
 
     def mysummary(self):
         if isinstance(self.underlayer.underlayer, DNP3):
-            print self.FUNC_CODE.SEQ, "Hello"
+            # print(self.FUNC_CODE, "Hello")
             return self.underlayer.underlayer.sprintf(DNP3_summary + Transport_summary + Application_Rsp_summary)
         if isinstance(self.underlayer, DNP3Transport):
             return self.underlayer.sprintf(Transport_summary + Application_Rsp_summary)
         else:
             return self.sprintf(Application_Req_summary)
+
 
 class DNP3ApplicationRequest(DNP3Application):
     name = "DNP3_Application_request"
@@ -247,12 +253,12 @@ class DNP3HeaderControl(Packet):
     fields_desc = [
         BitEnumField("DIR", MASTER, 1, stations),  # 9.2.4.1.3.1 DIR bit field
         BitEnumField("PRM", MASTER, 1,  stations),  # 9.2.4.1.3.2 PRM bit field
-        ConditionalField(cond_field[0], lambda x:x.PRM == MASTER),
-        ConditionalField(cond_field[1], lambda x:x.PRM == MASTER),
-        ConditionalField(cond_field[2], lambda x:x.PRM == MASTER),
-        ConditionalField(cond_field[3], lambda x:x.PRM == OUTSTATION),
-        ConditionalField(cond_field[4], lambda x:x.PRM == OUTSTATION),
-        ConditionalField(cond_field[5], lambda x:x.PRM == OUTSTATION),
+        ConditionalField(cond_field[0], lambda x: x.PRM == MASTER),
+        ConditionalField(cond_field[1], lambda x: x.PRM == MASTER),
+        ConditionalField(cond_field[2], lambda x: x.PRM == MASTER),
+        ConditionalField(cond_field[3], lambda x: x.PRM == OUTSTATION),
+        ConditionalField(cond_field[4], lambda x: x.PRM == OUTSTATION),
+        ConditionalField(cond_field[5], lambda x: x.PRM == OUTSTATION),
     ]
 
     def extract_padding(self, p):
@@ -277,9 +283,8 @@ class DNP3(Packet):
 
     def show_data_chunks(self):
         for i in range(len(self.data_chunks)):
-            print "\tData Chunk", i, "Len", len(self.data_chunks[i]),\
-                "CRC (", hex(struct.unpack('<H', self.data_chunks_crc[i])[0]), ")"
-
+            print("\tData Chunk", i, "Len", len(self.data_chunks[i]),
+                  "CRC (", hex(struct.unpack('<H', self.data_chunks_crc[i])[0]), ")")
 
     def add_data_chunk(self, chunk):
         chunk = update_data_chunk_crc(chunk)
@@ -289,28 +294,25 @@ class DNP3(Packet):
     def post_build(self, pkt, pay):
         cnk_len = self.chunk_len
         pay_len = len(pay)
-        pkt_len = len(pkt)
-        total = pkt_len + pay_len
-        chunks = pay_len / cnk_len  # chunk size
-        #chunks = total / cnk_len  # chunk size
+        # pkt_len = len(pkt)
+        # total = pkt_len + pay_len
+        chunks = pay_len // cnk_len  # chunk size
+        # chunks = total / cnk_len  # chunk size
         last_chunk = pay_len % cnk_len
 
         if last_chunk > 0:
-                chunks += 1
+            chunks += 1
 
         if pay_len == 3 and self.CONTROL.DIR == MASTER:
-
             # No IIN in Application layer and empty Payload
             pay = pay + struct.pack('H', crcDNP(pay))
 
         if pay_len == 5 and self.CONTROL.DIR == OUTSTATION:
-
             # IIN in Application layer and empty Payload
             pay = pay + struct.pack('H', crcDNP(pay))
 
         if self.LENGTH is None:
-
-             # Remove length , crc, start octets as part of length
+            # Remove length , crc, start octets as part of length
             length = (len(pkt+pay) - ((chunks * 2) + 1 + 2 + 2))
             pkt = pkt[:2] + struct.pack('<B', length) + pkt[3:]
 
@@ -355,3 +357,12 @@ bind_layers(TCP, DNP3, sport=dnp3_port)
 bind_layers(UDP, DNP3, dport=dnp3_port)
 bind_layers(UDP, DNP3, sport=dnp3_port)
 
+if __name__ == '__main__':
+    # get pcap filename from command line
+    pcap_file = sys.argv[1]
+    # read pcap file
+    packets = rdpcap(pcap_file)
+    # loop through packets
+    for packet in packets:
+        # print packet summary
+        print(packet.summary())

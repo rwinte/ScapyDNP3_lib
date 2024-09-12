@@ -1,8 +1,3 @@
-try:
-    from crcmod.crcmod import *
-    import crcmod.predefined
-except ImportError:
-    # Make this backward compatible
-    from crcmod import *
-    import predefined
-__doc__ = crcmod.__doc__
+from crcmod import *
+from crcmod.crcmod import __doc__ as _crcmod_doc
+__doc__ = _crcmod_doc
